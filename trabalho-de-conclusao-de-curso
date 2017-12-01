@@ -1,0 +1,285 @@
+
+
+#include <SPI.h> //Inclui a biblioteca SPI.h
+#include <Ethernet.h> //Inclui a biblioteca Ethernet.h
+
+const int potenciometroCisterna = 0; 
+const int potenciometroCaixaDagua = 1;
+
+int percentualCisterna = 0;
+int percentualCaixaDagua = 0;
+
+int problemaSistema = 7;
+int bomba_dagua = 5; 
+int solenoide = 6;
+
+String cisterna = "";
+String caixaDagua = "";
+
+boolean sole = false;
+boolean bomba=false; 
+boolean problema = false;
+
+int porta_solenoide = 9;
+int porta_problema = 2;
+int porta_bomba = 8;
+// Configurações para o Ethernet Shield
+byte mac[] = {
+  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
+};
+IPAddress ip(192, 168, 0, 40);
+EthernetServer server(80); //Inicializa a biblioteca EthernetServer com os valores de IP acima citados e configura a porta de acesso(80)
+
+String readString;
+
+void setup()
+{
+  pinMode(problemaSistema,INPUT);
+  pinMode(bomba_dagua,OUTPUT); 
+  pinMode(solenoide,OUTPUT); 
+  
+  pinMode(porta_solenoide, OUTPUT);
+  pinMode(porta_problema, OUTPUT);
+  pinMode(porta_bomba, OUTPUT);
+  // Abre a comunicaçõe serial e aguarde a abertura da porta.
+  Serial.begin(9600);
+  while (!Serial) {
+    ; // Aguarda conexão com um cabo via porta serial. 
+  }
+  //Inicia a conexão Ethernet e o servidor.
+  Ethernet.begin(mac, ip);
+  server.begin();
+  Serial.println(Ethernet.localIP());
+}
+
+void loop(){
+
+cisterna = String(percentualDeAguaCisterna(potenciometroCisterna));
+caixaDagua = String(percentualDeAguaCaixa(potenciometroCaixaDagua));
+
+
+  acionamentos(); //Vai para a função que executa alguma requisição de acionamento.
+
+  percentualCisterna = analogRead(potenciometroCisterna);  
+  percentualCaixaDagua = analogRead(potenciometroCaixaDagua);
+
+Serial.println(percentualCaixaDagua);
+Serial.println(percentualCisterna);
+  
+  delay(500);
+  EthernetClient client = server.available();// Verifica se tem alguém conectado
+
+  if (client)
+  {
+    while (client.connected())
+    {
+      if (client.available())
+      {
+        char c = client.read(); //Variável para armazenar os caracteres que forem recebidos
+        
+       
+if (readString.length() < 100) {
+          readString += c;             
+        }
+        if (c == '\n')
+        {
+          //Inicia página HTML
+          client.println("HTTP/1.1 200 OK");
+          client.println("Content-Type: text/html");
+          client.println();
+          client.print("<HTML>");
+          client.print("<head>");          
+          client.print("<title>TCC</title>");
+          client.print("<style>");
+          client.print("body{ text-align: center; font-family: Helvetica; font-weight: bold;  background:#D7EBEC ;font-size: 2em;}");        
+          client.print("a{ list-style: none; line-height: 0px; padding: 20px;  color: #FFFFFF;  background: green;  text-decoration: none;  border-radius: 10px;}");
+          client.print("ul{text-decoration: none;margin: 15px 0px 20px 0px;}li{display: inline-block;}h1{margin:10px;background: yellow;padding:40px;}");
+          client.print("h3{color:#35B8E6;background:#FFF;margin:10px; padding:10px;}.on{color:green;}.off{color:red;}");
+          client.print("</style>");
+          client.print("</head>");
+          client.print("<body>");
+          
+          client.println("<h2>Desenvolvimento de um sistema de reuso pluvial de baixo custo</h2>");        
+           
+          client.println("<h3>Caixa D'agua<br>"+caixaDagua+"%</h3>");
+          
+          client.println("<h3>Cisterna<br>"+cisterna+"%</h3>");
+
+          
+      if(bomba){
+        client.println("<div class=\"on\">Bomba Ligada</div>");
+        }else{
+          client.println("<div class=\"off\">Bomba Desligada</div>");
+          }
+           client.println("<ul><li><a href=\"/?bombaON\">&nbsp;&nbsp;&nbsp;Ligar Bomba&nbsp;&nbsp;&nbsp;</a></li>");
+          client.println("<li><a href=\"/?bombaOFF\">Desligar Bomba</a></li></ul>"); 
+      
+      if(sole){
+        client.println("<div class=\"on\">Solenoide Ligada</div>");
+        }else{
+          client.println("<div class=\"off\">Solenoide Desligada</div>");
+          }
+          
+         if(verificaStatusSistema() == false){
+          verificaStatusSistema();      
+          }else{
+            client.println("<h1>Problema no sistema</h1>");
+            }
+         
+          client.print(" <meta http-equiv=\"refresh\" content=\"2; url=http://192.168.0.40/\"> ");
+          client.println("</body>");
+          client.println("</HTML>");
+
+          break;
+
+        } //Fecha if (c == '\n')
+        
+      } //Fecha if (client.available())
+      
+    } //Fecha While (client.connected())
+    
+    delay(1);// Espera um tempo para o navegador receber os dados
+    client.stop(); // Fecha a conexão
+    
+  } else{
+    verificaStatusSistema();
+  }  
+} //Fecha loop
+
+
+boolean verificaStatusSistema(){
+  
+  if(digitalRead(problemaSistema) == 1){    
+   bomba=false;
+   sole = false;
+   problema = true; 
+   delay(200);
+      }else{
+        problema = false;
+  if(readString.indexOf("?bombaON") > 0){
+            bomba=true;
+          } else {
+            if(readString.indexOf("?bombaOFF") > 0){
+             bomba=false;
+            }
+          }
+          readString=""; 
+                  
+
+if(percentualDeAguaCisterna(potenciometroCisterna) > 5 && percentualDeAguaCaixa(potenciometroCaixaDagua) < 5){
+   if(bomba){ 
+   }else{
+        bomba=true;
+        sole = false;
+        
+    }    
+  }
+if(percentualDeAguaCisterna(potenciometroCisterna) < 5 && percentualDeAguaCaixa(potenciometroCaixaDagua) < 5){
+   sole = true;
+   bomba = false;
+   
+  }
+if(percentualDeAguaCisterna(potenciometroCisterna) < 5 && bomba == true){
+   bomba = false;   
+   sole = true;
+   
+  }
+if(percentualDeAguaCisterna(potenciometroCisterna) > 5 && sole == true){
+   bomba = true;
+   sole = false;
+   
+  }
+if(percentualDeAguaCaixa(potenciometroCaixaDagua) == 100){ 
+   bomba=false; 
+   sole = false;
+   
+   }
+ }
+
+ return problema;
+}
+void acionamentos(){
+   if(bomba){ 
+    digitalWrite(bomba_dagua,1);  
+    digitalWrite(porta_bomba, 0);
+  }else{ 
+    digitalWrite(bomba_dagua,0);
+    digitalWrite(porta_bomba, 1);  
+    }
+  if(sole){
+    digitalWrite(solenoide, 1);
+    digitalWrite(porta_solenoide, 0);
+    } else {
+      digitalWrite(solenoide, 0);
+      digitalWrite(porta_solenoide, 1);
+      }
+
+      if(problema){
+    
+    digitalWrite(porta_problema, 1);
+    } else {
+      digitalWrite(porta_problema, 0);
+      }
+
+}
+
+//Cálcula o percentual de água da Cisterna 
+int percentualDeAguaCisterna(int valuePoteciomentro){
+int valorInicial = 0;
+int valorFinal = 0;
+for(int i = 0; i < 20; i++){
+  
+  valorInicial += analogRead(valuePoteciomentro);
+
+  }
+valorInicial = valorInicial/21;
+
+valorFinal = (valorInicial - 245);
+int percentualDeAgua = 0;
+
+percentualDeAgua = (int)((valorFinal  /  190.00) * 100.00);
+if(percentualDeAgua > 100 || percentualDeAgua < 0){
+  if(percentualDeAgua > 100){
+    return 100;    
+    }else{
+    return 0;
+      }  
+  }else{
+    return percentualDeAgua;
+    }
+}
+
+//Calcula o percentual de água da caixa d'água
+int percentualDeAguaCaixa(int valuePoteciomentro){
+int valorInicial = 0;
+int valorFinal = 0;
+for(int i = 0; i < 20; i++){
+  valorInicial += analogRead(valuePoteciomentro);
+  
+}
+
+valorInicial = valorInicial/21;
+valorFinal = ( valorInicial - 240);
+
+
+int percentualDeAgua = 0;
+//Trabalhamos com a faixa de 240 ha 360, ou seja, 160 valores analogicos possiveis. 
+percentualDeAgua = (int)((valorFinal  /  120.00) * 100.00);
+
+
+
+if(percentualDeAgua > 100 || percentualDeAgua < 0){
+  if(percentualDeAgua > 100){
+    
+    
+    return 100;    
+    }else{
+      
+    
+    return 0;
+      }  
+  }else{
+   
+    return percentualDeAgua;
+    }
+}
